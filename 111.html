@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>温馨提醒</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: 'Microsoft YaHei', sans-serif;
+            background: #f0f0f0;
+            overflow: hidden;
+            position: fixed;
+            width: 100%;
+            height: 100%;
+            -webkit-overflow-scrolling: touch; /* 改善滚动性能 */
+        }
+        .tip-window {
+            position: absolute;
+            width: 100px;  /* 减小尺寸 */
+            height: 30px;
+            border-radius: 6px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.2); /* 简化阴影 */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            padding: 4px;
+            cursor: pointer;
+            z-index: 1000;
+            border: 1px solid rgba(255,255,255,0.3);
+            /* 移除复杂动画，使用简单过渡 */
+            transition: transform 0.2s ease, opacity 0.2s ease;
+            user-select: none;
+            -webkit-user-select: none; /* 禁止选择文本 */
+            touch-action: none; /* 改善触摸性能 */
+            animation: appear 0.3s ease-out;
+        }
+        .tip-content {
+            font-size: 14px; /* 减小字体 */
+            font-weight: bold;
+            line-height: 1.2;
+            color: #333;
+        }
+        .control-panel {
+            position: fixed;
+            top: 5px;
+            left: 5px;
+            background: rgba(255,255,255,0.98);
+            padding: 8px;
+            border-radius: 6px;
+            box-shadow: 0 1px 5px rgba(0,0,0,0.1);
+            z-index: 10000;
+        }
+        .control-btn {
+            background: #ff4757;
+            color: white;
+            border: none;
+            padding: 6px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 11px;
+            margin: 2px;
+        }
+        .counter { margin: 5px 0; font-size: 11px; color: #666; }
+
+        @keyframes appear {
+            0% {
+                opacity: 0;
+                transform: scale(0.8) translateY(-10px);
+            }
+            100% {
+                opacity: 1;
+                transform: scale(1) translateY(0);
+            }
+        }
+    </style>
+</head>
+<body>
+<div class="control-panel">
+    <h3 style="font-size: 12px; margin-bottom: 3px;">温馨提醒</h3>
+    <div class="counter">窗口: <span id="windowCount">0</span>/120</div>
+    <button class="control-btn" onclick="startTips()">开始</button>
+    <button class="control-btn" onclick="stopTips()">停止</button>
+    <button class="control-btn" onclick="closeAllTips()">清空</button>
+</div>
+
+<script>
+    // 增加到更多提示语
+    const tips = [
+        "多喝水~", "保持微笑", "元气满满", "记得水果", "好心情",
+        "爱自己", "想你", "顺利", "加油哦", "要开心",
+        "别熬夜", "早点睡", "记得吃饭", "多运动", "照顾好自己",
+        "你很棒", "坚持住", "放松点", "慢慢来", "会好的",
+        "相信自己", "勇敢点", "别放弃", "向前看", "珍惜当下"
+    ];
+
+    const bgColors = [
+        '#FFB6C1', '#87CEEB', '#98FB98', '#DDA0DD', '#FFD700',
+        '#FFA07A', '#20B2AA', '#DEB887', '#F5DEB3', '#FF69B4',
+        '#BA55D3', '#9370DB', '#3CB371', '#FFE4E1', '#F0FFF0'
+    ];
+
+    let tipWindows = [];
+    let isRunning = false;
+    let createInterval;
+    let activeTouches = new Map();
+    const MAX_WINDOWS = 120; // 总窗口数量120
+
+    // 创建窗口
+    function createTipWindow() {
+        if (!isRunning || tipWindows.length >= MAX_WINDOWS) return;
+
+        const screenWidth = window.innerWidth;
+        const screenHeight = window.innerHeight;
+
+        const tipWindow = document.createElement('div');
+        tipWindow.className = 'tip-window';
+
+        // 随机位置
+        tipWindow.style.left = Math.random() * (screenWidth - 100) + 'px';
+        tipWindow.style.top = Math.random() * (screenHeight - 30) + 'px';
+        tipWindow.style.background = bgColors[Math.floor(Math.random() * bgColors.length)];
+
+        // 内容
+        const content = document.createElement('div');
+        content.className = 'tip-content';
+        content.textContent = tips[Math.floor(Math.random() * tips.length)];
+        tipWindow.appendChild(content);
+
+        document.body.appendChild(tipWindow);
+        tipWindows.push(tipWindow);
+
+        updateCounter();
+
+        // 点击关闭
+        tipWindow.onclick = function() {
+            closeTipWindow(tipWindow);
+        };
+
+        // 添加触摸支持
+        setupTouchEvents(tipWindow);
+    }
+
+    // 设置触摸事件
+    function setupTouchEvents(element) {
+        element.addEventListener('touchstart', handleTouchStart, { passive: false });
+        element.addEventListener('touchmove', handleTouchMove, { passive: false });
+        element.addEventListener('touchend', handleTouchEnd, { passive: false });
+    }
+
+    function handleTouchStart(e) {
+        e.preventDefault();
+        const touch = e.touches[0];
+        const element = e.target;
+        activeTouches.set(touch.identifier, {
+            element: element,
+            startX: touch.clientX,
+            startY: touch.clientY,
+            offsetX: touch.clientX - element.offsetLeft,
+            offsetY: touch.clientY - element.offsetTop
+        });
+    }
+
+    function handleTouchMove(e) {
+        e.preventDefault();
+        for (let touch of e.changedTouches) {
+            const touchData = activeTouches.get(touch.identifier);
+            if (touchData) {
+                const newX = touch.clientX - touchData.offsetX;
+                const newY = touch.clientY - touchData.offsetY;
+                touchData.element.style.left = newX + 'px';
+                touchData.element.style.top = newY + 'px';
+            }
+        }
+    }
+
+    function handleTouchEnd(e) {
+        e.preventDefault();
+        for (let touch of e.changedTouches) {
+            activeTouches.delete(touch.identifier);
+        }
+    }
+
+    function closeTipWindow(windowElement) {
+        windowElement.style.opacity = '0';
+        windowElement.style.transform = 'scale(0.8)';
+        setTimeout(() => {
+            if (windowElement.parentNode) {
+                windowElement.parentNode.removeChild(windowElement);
+            }
+            tipWindows = tipWindows.filter(w => w !== windowElement);
+            updateCounter();
+        }, 200);
+    }
+
+    function closeAllTips() {
+        tipWindows.forEach(window => {
+            closeTipWindow(window);
+        });
+        tipWindows = [];
+        updateCounter();
+    }
+
+    function startTips() {
+        if (isRunning) return;
+        isRunning = true;
+
+        // 加快创建速度：从300ms减少到150ms
+        createInterval = setInterval(() => {
+            if (isRunning && tipWindows.length < MAX_WINDOWS) {
+                // 每次创建1-3个窗口，加快弹出速度
+                const createCount = Math.floor(Math.random() * 3) + 1;
+                for (let i = 0; i < createCount; i++) {
+                    createTipWindow();
+                }
+            }
+        }, 150); // 加快创建频率
+
+        // 初始快速创建一批窗口
+        for (let i = 0; i < 10; i++) {
+            setTimeout(() => {
+                const createCount = Math.floor(Math.random() * 4) + 2;
+                for (let j = 0; j < createCount; j++) {
+                    createTipWindow();
+                }
+            }, i * 100);
+        }
+    }
+
+    function stopTips() {
+        isRunning = false;
+        if (createInterval) {
+            clearInterval(createInterval);
+        }
+    }
+
+    function updateCounter() {
+        document.getElementById('windowCount').textContent = tipWindows.length;
+    }
+
+    // 双指触摸关闭所有
+    document.addEventListener('touchstart', function(e) {
+        if (e.touches.length >= 2) {
+            closeAllTips();
+            stopTips();
+        }
+    });
+
+    // 防止页面滚动
+    document.addEventListener('touchmove', function(e) {
+        if (e.target.className !== 'tip-window') {
+            e.preventDefault();
+        }
+    }, { passive: false });
+
+    // 自动开始
+    setTimeout(startTips, 500);
+</script>
+</body>
+</html>
